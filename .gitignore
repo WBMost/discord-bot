@@ -1,5 +1,6 @@
-..env
 bot
+bin
 stockExchange
 chromedriver
 __pycache__
+.env
