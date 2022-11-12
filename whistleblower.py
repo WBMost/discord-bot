@@ -34,13 +34,16 @@ user_file = "stockExchange/{}.json"
 
 intents = nextcord.Intents.default()
 intents.message_content = True
+intents.members = True
+
+help_command = commands.DefaultHelpCommand(no_category = 'Base Commands')
 
 # takes too long to initialize when not being used
 # will be initialized of first call using these
 hsw = None
 se = None
 
-bot = commands.Bot(intents=intents,command_prefix='!')
+bot = commands.Bot(intents=intents,command_prefix='!',help_command=help_command)
 channel = bot.get_channel(stock_zone_id)
 class numbers:
     def __init__(self):
@@ -85,338 +88,407 @@ def is_file(path):
     except FileNotFoundError:
         return False
 
-@bot.command()
-async def search(ctx,*keywords):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: search executed')
-    await ctx.message.add_reaction('👀')
-    if not keywords:
-        await ctx.send('Couldn\'t parse keyword. Using default value...')
-        keywords = ('apple','inc')
-    keyword = ''
-    for word in keywords:
-        keyword += word + ' '
-    keyword = keyword[:-1]
-    resp = num.se.search_symbol(keyword)
-    message = '```'
-    if resp == []:
-        message += f'Couldn\'t locate {keyword}. Try again with different keywords.'
-    else:
-        for x,r in enumerate(resp,0):
-            message+=f"Name: {r['2. name']} \n"
-            message+=f"Symbol: {r['1. symbol']} \n\n"
-            if x >=5:
-                break
-    message += '```'
-    await ctx.send(message)
-    await ctx.message.add_reaction('✅')
-
-@bot.command()
-async def create(ctx):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: create executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
+@bot.command(pass_context=True,)
+async def nickname(ctx:Interaction, member_name, *nickname):
+    """
+    Changes the nickname of users in the server.
     
-    if not is_file(user_file.format(user_id)):
-        num.se.create_file(user_id)
+    If the member name/nickname contains a space (" ") then you will need to place 
+    the entire name in quotes. 
+    
+    EX_1: !nickname "penis linguinist" big 'ol handsome man
+    EX_2: !nickname "Not mad, just disappointed#0001" Party Pooper McPenisBreath
+    """
+    info(f'Changing nickname for: {member_name}')
+    await ctx.message.delete()
+    member = ctx.channel.guild.get_member_named(member_name)
+    nickname = ' '.join(nickname)
+    if member is not None:
+        await member.edit(nick=nickname)
+    else:
+        await ctx.message.author.send('couldn\'t locate member to nickname.'\
+            'Try using their full nickname or username.')
+        return
+    if not nickname:
+        await ctx.message.author.send('Couldn\'t parse nickname. Returning to default name...')
+    else:
+        await ctx.message.author.send(f'Nickname was changed for {member.mention}')
+
+class Stock_Trading_Commands(commands.Cog):
+    """
+    Commands used for interacting with mock stock trading
+    """
+
+    @commands.command()
+    async def search(self,ctx,*keywords):
+        """
+        Searches for public companies using passed keywords 
+        returning top 6 results.
+        """
+        await ctx.message.add_reaction('👀')
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: search executed')
+        if not keywords:
+            await ctx.send('Couldn\'t parse keyword. Using default value...')
+            keywords = ('apple','inc')
+        keyword = ''
+        for word in keywords:
+            keyword += word + ' '
+        keyword = keyword[:-1]
+        resp = num.se.search_symbol(keyword)
+        message = '```'
+        if resp == []:
+            message += f'Couldn\'t locate {keyword}. Try again with different keywords.'
+        else:
+            for x,r in enumerate(resp,0):
+                message+=f"Name: {r['2. name']} \n"
+                message+=f"Symbol: {r['1. symbol']} \n\n"
+                if x >=5:
+                    break
+        message += '```'
+        await ctx.send(message)
         await ctx.message.add_reaction('✅')
-    else:
-        await ctx.send('Account already exists. To overwrite current account, use "!create_overwrite"')
-        await ctx.message.add_reaction('❌')
-        return None
 
-@bot.command()
-async def create_overwrite(ctx):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: create_overwrite executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
-    
-    num.se.create_file(user_id)
-    await ctx.message.add_reaction('✅')
-
-@bot.command(aliases=['bal'])
-async def balance(ctx):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: check balance executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
-    info(user_id)
-
-    try:
-        if is_file(user_file.format(user_id)):
-            await ctx.send(num.se.read_balance(user_id))
+    @commands.command()
+    async def create(ctx):
+        """
+        how you create your mock market portfolio
+        """
+        await ctx.message.add_reaction('👀')
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: create executed.')
+        user_id = ctx.message.author.id
+        
+        if not is_file(user_file.format(user_id)):
+            num.se.create_file(user_id)
             await ctx.message.add_reaction('✅')
         else:
-            await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+            await ctx.send('Account already exists. To overwrite current account, use "!create_overwrite"')
             await ctx.message.add_reaction('❌')
             return None
-    except:
-        await ctx.send('Couldn\'t locate account balance.')
-        await ctx.message.add_reaction('❌')
-        return None
- 
-@bot.command(aliases=['purchase'])
-async def buy(ctx,ticker, num):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: purchase executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
 
-    value = float(num)
-    try:
-        if is_file(user_file.format(user_id)):
-            if num.se.purchase(user_id,ticker,value) != 66:
-                await ctx.message.add_reaction('✅')
-            else:
-                await ctx.send(f'You don\'t have the funds to purchase ${value} of {ticker}.')
-                await ctx.message.add_reaction('❌')
-                return None
-        else:
-            await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
-            await ctx.message.add_reaction('❌')
-            return None
-    except:
-        await ctx.send(f'Error when attempting to purchase {ticker}. Make sure you have the right Ticker Symbol, funds, and no dollar signs in command.')
-        await ctx.message.add_reaction('❌')
-        return None
-
-@bot.command()
-async def sell(ctx,ticker,num):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: sell executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
-
-    value = float(num)
-    try:
-        if is_file(user_file.format(user_id)):
-            if num.se.sell(user_id,ticker,value) != 66:
-                await ctx.message.add_reaction('✅')
-            else:
-                await ctx.send(f'You don\'t have the assets to sell ${value} of {ticker}.')
-                await ctx.message.add_reaction('❌')
-                return None
-        else:
-            await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
-            await ctx.message.add_reaction('❌')
-            return None
-    except Exception as e:
-        error(f'Couldn\'t run "sell" command. {e}-{format_exc()}')
-        await ctx.send(f'Error when attempting to sell {ticker}. Make sure you have the right Ticker Symbol, assets, and no dollar signs in command.')
-        await ctx.message.add_reaction('❌')
-        return None
-
-@bot.command(name='info')
-async def get_info(ctx,ticker='aapl'):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: info executed.')
-    await ctx.message.add_reaction('👀')
-
-    data = num.se.preview_stock(ticker)
-    info(data)
-    desc = ''
-    if data['Recommendation'] == 'Buy':
-        color = 0x235928
-    elif data['Recommendation'] == 'Overweight':
-        color = 0x27462D
-    elif data['Recommendation'] == 'Underweight':
-        color = 0x43292D
-    elif data['Recommendation'] == 'Sell':
-        color = 0x562529
-    else:
-        color = 0x2C2F33
-    for key in data:
-        if key == 'Name':
-            continue
-        desc += str(key) + ': ' + str(data[key]) + '\n'
-    embed = nextcord.Embed(
-        title= str(data['Name']),
-        description=desc,
-        color=color
-    )
-    await ctx.send(embed=embed)
-    await ctx.message.add_reaction('✅')
-
-@bot.command(aliases=['hist'])
-async def history(ctx, size=5):
-    if num.se is None:
-        num.se = StockExchanger()
-    size = int(size)
-    info('COMMAND: history executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
-    if is_file(user_file.format(user_id)):
-        data = num.se.read_history(user_id)
-    else:
-        await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
-        await ctx.message.add_reaction('❌')
-        return None
-
-    if size <= 25:
-        tabulated = tabulate(data,['TRANSACTION_TYPE','TICKER','COST_PER_SHARE($)','VALUE($)','START_BALANCE($)','END_BALANCE($)'],tablefmt="orgtbl")
-    else:
-        tabulated = data[:size].to_string()
-    await ctx.send(f'{ctx.message.author.name}\'s history:```{tabulated}```')
-    await ctx.message.add_reaction('✅')
-
-@bot.command(aliases=['inv'])
-async def inventory(ctx):
-    if num.se is None:
-        num.se = StockExchanger()
-    info('COMMAND: inventory executed.')
-    await ctx.message.add_reaction('👀')
-    user_id = ctx.message.author.id
-
-    if is_file(user_file.format(user_id)):
-        data = num.se.read_stocks(user_id)
-    else:
-        await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
-        await ctx.message.add_reaction('❌')
-        return None
-
-    if data.shape[0] <= 25:
-        message = tabulate(data,["SHARES","VALUE"],tablefmt="orgtbl")
-    else:
-        message = data
-    await ctx.send(f'{ctx.message.author.name}\'s inventory:```{message}```')
-    await ctx.message.add_reaction('✅')
-
-
-@bot.command(name = 'monitor', description='will send data about house of representative\'s stock trades',guild_ids=bj)
-async def monitor(ctx, *args):
-    if num.hsw is None:
-        num.hsw = HSW_Scraper()
-    info('COMMAND: monitor executed.')
-    await ctx.message.add_reaction('👀')
-    number = 5
-    name = ''
-    for arg in args:
-        if arg.isnumeric():
-            number = int(arg)
-        else:
-            name += f'{arg} '
-    info(name)
-    name = name[:-1]
-    try:
-        if name == '':
-            name = 'Hon. Nancy Pelosi'
-        characters = num.hsw.search_characters(name)
-        if characters == []:
-            await ctx.send('Couldn\'t find representative.')
-            await ctx.message.add_reaction('❌')
-            return None
-        for person in characters:
-            r = num.hsw.house_watcher(person['name'],number)
-            embed = nextcord.Embed(
-                title= str(r[1]['name']) + '\'s recent trades'
-            )
-            if r[1]['image'] != None:
-                embed.set_image(url = r[1]['image'])
-            embed.set_footer(text = r[1]['role'])
-            await ctx.send(embed=embed)
-            await ctx.send(r[0])
+    @commands.command()
+    async def create_overwrite(ctx):
+        """
+        how you reset your current mock market portfolio and start fresh
+        """
+        await ctx.message.add_reaction('👀')
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: create_overwrite executed.')
+        user_id = ctx.message.author.id
+        
+        num.se.create_file(user_id)
         await ctx.message.add_reaction('✅')
-        return None
-    except Exception as e:
-        info('ERROR: {} - {}'.format(e,format_exc()))
-        await ctx.send('Couldn\'t process monitor request')
-        await ctx.message.add_reaction('❌')
-        return None
 
-@bot.command(pass_context=True)
-async def play(ctx:nextcord.Interaction, *args):
-    # if ctx.message.author.id == 373656911423209473:
-    #     await ctx.send('fuck off tectal')
-    #     return
-    if len(args) == 0:
-        url = 'https://www.youtube.com/watch?v=vPKp29Luryc'
-    # check if passed info is a viable url
-    elif ['https','watch?','.com'] in args:
-        url = args[0]
-    # should be a search query now that needs to be assembled and find it's the top video
-    else:
-        search = '+'.join(args)
-        info(search)
-        html = urllib.request.urlopen(url = f'https://www.youtube.com/results?search_query={search}')
-        ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
-        url = f"https://www.youtube.com/watch?v={ids[0]}"
-        info(url)
+    @commands.command(aliases=['bal'])
+    async def balance(ctx):
+        """
+        checks current mock market balance
+        """
+        await ctx.message.add_reaction('👀')
+        info('COMMAND: check balance executed.')
+        if num.se is None:
+            num.se = StockExchanger()
+        user_id = ctx.message.author.id
+        info(user_id)
 
-    YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+        try:
+            if is_file(user_file.format(user_id)):
+                await ctx.send(num.se.read_balance(user_id))
+                await ctx.message.add_reaction('✅')
+            else:
+                await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+                await ctx.message.add_reaction('❌')
+                return None
+        except:
+            await ctx.send('Couldn\'t locate account balance.')
+            await ctx.message.add_reaction('❌')
+            return None
     
-    try:
-        voice = await ctx.message.author.voice.channel.connect()
-        if not voice.is_playing():
-            with YoutubeDL(YDL_OPTIONS) as ydl:
-                vid_info = ydl.extract_info(url, download=False)
-                info(f'garbage:{len(vid_info["entries"])[0]["formats"][0]["url"] if "entries" in vid_info.keys() else vid_info.keys()}\n')
-            URL = vid_info['formats'][0]['url']
-            # check for playlist and add rest to queue
-            voice.play(nextcord.PCMVolumeTransformer(nextcord.FFmpegPCMAudio(executable='./bin/ffmpeg.exe', source = URL, **FFMPEG_OPTIONS)))
-            
-            voice.is_playing()
-            if '&list=' in url:
-                YDL_OPTIONS = {'format': 'bestaudio'}
+    @commands.command(aliases=['purchase'])
+    async def buy(self,ctx,ticker, num):
+        """
+        buy a value (num) amount of selected ticker 
+        """
+        info('COMMAND: purchase executed.')
+        await ctx.message.add_reaction('👀')
+        if num.se is None:
+            num.se = StockExchanger()
+        user_id = ctx.message.author.id
+
+        value = float(num)
+        try:
+            if is_file(user_file.format(user_id)):
+                if num.se.purchase(user_id,ticker,value) != 66:
+                    await ctx.message.add_reaction('✅')
+                else:
+                    await ctx.send(f'You don\'t have the funds to purchase ${value} of {ticker}.')
+                    await ctx.message.add_reaction('❌')
+                    return None
+            else:
+                await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+                await ctx.message.add_reaction('❌')
+                return None
+        except:
+            await ctx.send(f'Error when attempting to purchase {ticker}. Make sure you have the right Ticker Symbol, funds, and no dollar signs in command.')
+            await ctx.message.add_reaction('❌')
+            return None
+
+    @commands.command()
+    async def sell(self,ctx,ticker,num):
+        """
+        sell a value (num) amount of select ticker
+        """
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: sell executed.')
+        await ctx.message.add_reaction('👀')
+        user_id = ctx.message.author.id
+
+        value = float(num)
+        try:
+            if is_file(user_file.format(user_id)):
+                if num.se.sell(user_id,ticker,value) != 66:
+                    await ctx.message.add_reaction('✅')
+                else:
+                    await ctx.send(f'You don\'t have the assets to sell ${value} of {ticker}.')
+                    await ctx.message.add_reaction('❌')
+                    return None
+            else:
+                await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+                await ctx.message.add_reaction('❌')
+                return None
+        except Exception as e:
+            error(f'Couldn\'t run "sell" command. {e}-{format_exc()}')
+            await ctx.send(f'Error when attempting to sell {ticker}. Make sure you have the right Ticker Symbol, assets, and no dollar signs in command.')
+            await ctx.message.add_reaction('❌')
+            return None
+
+    @commands.command(name='info')
+    async def get_info(self,ctx,ticker='aapl'):
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: info executed.')
+        await ctx.message.add_reaction('👀')
+
+        data = num.se.preview_stock(ticker)
+        info(data)
+        desc = ''
+        if data['Recommendation'] == 'Buy':
+            color = 0x235928
+        elif data['Recommendation'] == 'Overweight':
+            color = 0x27462D
+        elif data['Recommendation'] == 'Underweight':
+            color = 0x43292D
+        elif data['Recommendation'] == 'Sell':
+            color = 0x562529
+        else:
+            color = 0x2C2F33
+        for key in data:
+            if key == 'Name':
+                continue
+            desc += str(key) + ': ' + str(data[key]) + '\n'
+        embed = nextcord.Embed(
+            title= str(data['Name']),
+            description=desc,
+            color=color
+        )
+        await ctx.send(embed=embed)
+        await ctx.message.add_reaction('✅')
+
+    @commands.command(aliases=['hist'])
+    async def history(self,ctx, size=5):
+        if num.se is None:
+            num.se = StockExchanger()
+        size = int(size)
+        info('COMMAND: history executed.')
+        await ctx.message.add_reaction('👀')
+        user_id = ctx.message.author.id
+        if is_file(user_file.format(user_id)):
+            data = num.se.read_history(user_id)
+        else:
+            await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+            await ctx.message.add_reaction('❌')
+            return None
+
+        if size <= 25:
+            tabulated = tabulate(data,['TRANSACTION_TYPE','TICKER','COST_PER_SHARE($)','VALUE($)','START_BALANCE($)','END_BALANCE($)'],tablefmt="orgtbl")
+        else:
+            tabulated = data[:size].to_string()
+        await ctx.send(f'{ctx.message.author.name}\'s history:```{tabulated}```')
+        await ctx.message.add_reaction('✅')
+
+    @commands.command(aliases=['inv'])
+    async def inventory(self,ctx):
+        if num.se is None:
+            num.se = StockExchanger()
+        info('COMMAND: inventory executed.')
+        await ctx.message.add_reaction('👀')
+        user_id = ctx.message.author.id
+
+        if is_file(user_file.format(user_id)):
+            data = num.se.read_stocks(user_id)
+        else:
+            await ctx.send('Couldn\'t locate account. Please create an account and try again later.')
+            await ctx.message.add_reaction('❌')
+            return None
+
+        if data.shape[0] <= 25:
+            message = tabulate(data,["SHARES","VALUE"],tablefmt="orgtbl")
+        else:
+            message = data
+        await ctx.send(f'{ctx.message.author.name}\'s inventory:```{message}```')
+        await ctx.message.add_reaction('✅')
+
+
+    @commands.command(name = 'monitor', description='will send data about house of representative\'s stock trades',guild_ids=bj)
+    async def monitor(self,ctx, *args):
+        if num.hsw is None:
+            num.hsw = HSW_Scraper()
+        info('COMMAND: monitor executed.')
+        await ctx.message.add_reaction('👀')
+        number = 5
+        name = ''
+        for arg in args:
+            if arg.isnumeric():
+                number = int(arg)
+            else:
+                name += f'{arg} '
+        info(name)
+        name = name[:-1]
+        try:
+            if name == '':
+                name = 'Hon. Nancy Pelosi'
+            characters = num.hsw.search_characters(name)
+            if characters == []:
+                await ctx.send('Couldn\'t find representative.')
+                await ctx.message.add_reaction('❌')
+                return None
+            for person in characters:
+                r = num.hsw.house_watcher(person['name'],number)
+                embed = nextcord.Embed(
+                    title= str(r[1]['name']) + '\'s recent trades'
+                )
+                if r[1]['image'] != None:
+                    embed.set_image(url = r[1]['image'])
+                embed.set_footer(text = r[1]['role'])
+                await ctx.send(embed=embed)
+                await ctx.send(r[0])
+            await ctx.message.add_reaction('✅')
+            return None
+        except Exception as e:
+            info('ERROR: {} - {}'.format(e,format_exc()))
+            await ctx.send('Couldn\'t process monitor request')
+            await ctx.message.add_reaction('❌')
+            return None
+
+
+class Music_Commands(commands.Cog):
+    """
+    (This really sucks ass and breaks... would not recommend)
+    Music related commands
+    """
+
+    @commands.command(pass_context=True)
+    async def play(self,ctx:nextcord.Interaction, *args):
+        # if ctx.message.author.id == 373656911423209473:
+        #     await ctx.send('fuck off tectal')
+        #     return
+        if len(args) == 0:
+            url = 'https://www.youtube.com/watch?v=vPKp29Luryc'
+        # check if passed info is a viable url
+        elif ['https','watch?','.com'] in args:
+            url = args[0]
+        # should be a search query now that needs to be assembled and find it's the top video
+        else:
+            search = '+'.join(args)
+            info(search)
+            html = urllib.request.urlopen(url = f'https://www.youtube.com/results?search_query={search}')
+            ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+            url = f"https://www.youtube.com/watch?v={ids[0]}"
+            info(url)
+
+        YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
+        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+        
+        try:
+            voice = await ctx.message.author.voice.channel.connect()
+            if not voice.is_playing():
                 with YoutubeDL(YDL_OPTIONS) as ydl:
                     vid_info = ydl.extract_info(url, download=False)
-                    for entry in vid_info['entries']:
-                        num.add_song(ctx.message.guild.id,entry['url'])
-            info(f'VC joined: {voice.server_id}')
-        else:
-            await ctx.send("Already playing song")
-            return
-    except nextcord.errors.ClientException as e:
-        info('adding song to queue because song was already playing')
-        num.add_song(ctx.message.guild.id,url)
-        info(f'current queue:{num.song_queue}')
+                    info(f'garbage:{len(vid_info["entries"])[0]["formats"][0]["url"] if "entries" in vid_info.keys() else vid_info.keys()}\n')
+                URL = vid_info['formats'][0]['url']
+                # check for playlist and add rest to queue
+                voice.play(nextcord.PCMVolumeTransformer(nextcord.FFmpegPCMAudio(executable='./bin/ffmpeg.exe', source = URL, **FFMPEG_OPTIONS)))
+                
+                voice.is_playing()
+                if '&list=' in url:
+                    YDL_OPTIONS = {'format': 'bestaudio'}
+                    with YoutubeDL(YDL_OPTIONS) as ydl:
+                        vid_info = ydl.extract_info(url, download=False)
+                        for entry in vid_info['entries']:
+                            num.add_song(ctx.message.guild.id,entry['url'])
+                info(f'VC joined: {voice.server_id}')
+            else:
+                await ctx.send("Already playing song")
+                return
+        except nextcord.errors.ClientException as e:
+            info('adding song to queue because song was already playing')
+            num.add_song(ctx.message.guild.id,url)
+            info(f'current queue:{num.song_queue}')
 
-    
 
-@bot.command(pass_context=True)
-async def next(ctx:nextcord.Interaction):
-    for voice in bot.voice_clients:
-        if voice.__dict__['server_id'] == ctx.message.guild.id:
-            num.next_song(voice)
+    @commands.command(pass_context=True)
+    async def next(self,ctx:nextcord.Interaction):
+        for voice in bot.voice_clients:
+            if voice.__dict__['server_id'] == ctx.message.guild.id:
+                num.next_song(voice)
 
-@bot.command()
-async def gif(ctx:nextcord.Interaction, *args):
-    info('COMMAND: generating gif.')
-    search = ''
-    for arg in args:
-        search += f'{arg} '
-    search = search[:-1]
-    await ctx.send(get_gif(search))
+class Memes_Commands(commands.Cog):
+    """
+    The stupid meme shit commands
+    """
 
-@bot.command(aliases=['gen','photo','image'])
-async def generate(ctx:nextcord.Interaction, *args):
-    info('COMMAND: generating ai picture.')
-    search = ''
-    for arg in args:
-        search += f'{arg} '
-    search = search[:-1]
-    info(search)
-    params = {
-        'text':search
-    }
-    headers = {
-        'api-key':'0df59b56-fa17-4450-9e4f-657ebabfe4f6'
-    }
-    
-    r = requests.post("https://api.deepai.org/api/text2img",data=params,headers=headers).json()
-    try:
-        await ctx.send(r['output_url'])
-    except:
-        info(f'could\'t print your shit image or whatever, {r}')
+    @commands.command()
+    async def gif(self,ctx:nextcord.Interaction, *args):
+        """
+        grab a shitty random gif based on passed in keywords because why not
+        """
+        
+        info('COMMAND: generating gif.')
+        search = ''
+        for arg in args:
+            search += f'{arg} '
+        search = search[:-1]
+        await ctx.send(get_gif(search))
+
+    @commands.command(aliases=['gen','photo','image'])
+    async def generate(self,ctx:nextcord.Interaction, *args):
+        """
+        AI will generate you an absolutely awful image based on passed in description
+        """
+
+        info('COMMAND: generating ai picture.')
+        search = ''
+        for arg in args:
+            search += f'{arg} '
+        search = search[:-1]
+        info(search)
+        params = {
+            'text':search
+        }
+        headers = {
+            'api-key':'0df59b56-fa17-4450-9e4f-657ebabfe4f6'
+        }
+        
+        r = requests.post("https://api.deepai.org/api/text2img",data=params,headers=headers).json()
+        try:
+            await ctx.send(r['output_url'])
+        except:
+            info(f'could\'t print your shit image or whatever, {r}')
 
 @bot.listen("on_message")
 async def on_message1(message:nextcord.Message):
@@ -765,9 +837,6 @@ async def on_voice_state_update(member:Member,before:VoiceState,after:VoiceState
             
 
 
-@bot.event
-async def on_ready():
-    info(f'{bot.user} has connected to Discord!')
 
 def get_gif(search):
     params = {
@@ -804,7 +873,6 @@ async def clean_up_time():
                     num.active_vc[voice] += 1
 
             
-
 @clean_up_time.before_loop
 async def before_clean_up():
     await bot.wait_until_ready()
@@ -816,6 +884,14 @@ async def before_american():
     info('starting up random music')
 
 
+
+@bot.event
+async def on_ready():
+    info(f'{bot.user} has connected to Discord!')
+
 clean_up_time.start()
 random_meme_sounds.start()
+bot.add_cog(Stock_Trading_Commands())
+bot.add_cog(Memes_Commands())
+bot.add_cog(Music_Commands())
 bot.run(TOKEN)
