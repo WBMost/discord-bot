@@ -12,8 +12,7 @@ from dotenv import load_dotenv
 from web_scraping import HSW_Scraper
 from stock_exchange import StockExchanger
 from youtube_dl import YoutubeDL
-import ffmpeg 
-import discord
+import ffmpeg
 import urllib.request
 
 def info(mes):
@@ -45,6 +44,7 @@ se = None
 
 bot = commands.Bot(intents=intents,command_prefix='!',help_command=help_command)
 channel = bot.get_channel(stock_zone_id)
+
 class numbers:
     def __init__(self):
         self.active_users = []
@@ -88,7 +88,7 @@ def is_file(path):
     except FileNotFoundError:
         return False
 
-@bot.command(pass_context=True,)
+@bot.command(pass_context=True,aliases=['nick','name'])
 async def nickname(ctx:Interaction, member_name, *nickname):
     """
     Changes the nickname of users in the server.
@@ -384,7 +384,6 @@ class Stock_Trading_Commands(commands.Cog):
             await ctx.send('Couldn\'t process monitor request')
             await ctx.message.add_reaction('❌')
             return None
-
 
 class Music_Commands(commands.Cog):
     """
@@ -820,8 +819,6 @@ async def random_meme_sounds():
     except:
         error('couldn\'t connect to VC')
 
-    
-
 @bot.event
 async def on_voice_state_update(member:Member,before:VoiceState,after:VoiceState):
     if member.voice != None and not member.bot:
@@ -834,9 +831,6 @@ async def on_voice_state_update(member:Member,before:VoiceState,after:VoiceState
             num.active_users.remove(member)
         except ValueError as v:
             error(f'value error. Couldn\'t remove {member} from active VC user list.')
-            
-
-
 
 def get_gif(search):
     params = {
@@ -872,7 +866,7 @@ async def clean_up_time():
                 else:
                     num.active_vc[voice] += 1
 
-            
+         
 @clean_up_time.before_loop
 async def before_clean_up():
     await bot.wait_until_ready()
